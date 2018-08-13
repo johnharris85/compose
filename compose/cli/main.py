@@ -985,7 +985,7 @@ class TopLevelCommand(object):
         If you want to force Compose to stop and recreate all containers, use the
         `--force-recreate` flag.
 
-        Usage: up [options] [--scale SERVICE=NUM...] [SERVICE...]
+        Usage: up [options] [--exclude SERVICE...] [--scale SERVICE=NUM...] [SERVICE...]
 
         Options:
             -d, --detach               Detached mode: Run containers in the background,
@@ -1016,6 +1016,7 @@ class TopLevelCommand(object):
                                        container. Implies --abort-on-container-exit.
             --scale SERVICE=NUM        Scale SERVICE to NUM instances. Overrides the
                                        `scale` setting in the Compose file if present.
+            --exclude=[]               Services to exclude.
         """
         start_deps = not options['--no-deps']
         always_recreate_deps = options['--always-recreate-deps']
@@ -1026,6 +1027,7 @@ class TopLevelCommand(object):
         remove_orphans = options['--remove-orphans']
         detached = options.get('--detach')
         no_start = options.get('--no-start')
+        excluded_services = options['--exclude']
 
         if detached and (cascade_stop or exit_value_from):
             raise UserError("--abort-on-container-exit and -d cannot be combined.")
@@ -1039,6 +1041,15 @@ class TopLevelCommand(object):
         opts = ['--detach', '--abort-on-container-exit', '--exit-code-from']
         for excluded in [x for x in opts if options.get(x) and no_start]:
             raise UserError('--no-start and {} cannot be combined.'.format(excluded))
+
+        if excluded_services:
+            intersect = set(service_names).intersection(excluded_services)
+            if intersect:
+                raise UserError("cannot specify services and --exclude them ({})"
+                                .format(",".join(intersect)))
+            service_names = list(set(self.project.service_names) - set(excluded_services))
+            if not service_names:
+                raise UserError("cannot exclude all services")
 
         with up_shutdown_context(self.project, service_names, timeout, detached):
             warn_for_swarm_mode(self.project.client)
